@@ -68,18 +68,21 @@ def crawl(seed_id, auth_token, token_type, output_file=None, frontier=set(), exp
         response = urllib.request.urlopen(request)
         response_body = json.loads(response.read().decode('latin-1'))
 
-        for artist in response_body['artists']:
-            if artist['id'] not in explored:
-                if verbose: print('Adding %s to frontier...' % artist['name'])
-                frontier.add(artist['id'])
-                edge = (current_artist_id, artist['id'])
-                edges.add(edge)
-                if output_file != None:
-                    output_file.write('%s\t%s\n' % edge)
-            if (artist['id'], current_artist_id) not in edges:
-                edges.add((current_artist_id, artist['id']))
+        try:
+            for artist in response_body['artists']:
+                if artist['id'] not in explored:
+                    if verbose: print('Adding %s to frontier...' % artist['name'])
+                    frontier.add(artist['id'])
+                    edge = (current_artist_id, artist['id'])
+                    edges.add(edge)
+                    if output_file != None:
+                        output_file.write('%s\t%s\n' % edge)
+                if (artist['id'], current_artist_id) not in edges:
+                    edges.add((current_artist_id, artist['id']))
+        except KeyError:
+            auth_token, token_type, _ = get_token(os.getenv('SPOTIFY_CLIENT_ID'), os.getenv('SPOTIFY_CLIENT_SECRET'))
 
-        if not verbose: print('\rFrontier Size: %d | Explored Size: %d' % (len(frontier), len(explored)), end='')
+        if not verbose: print('\rFrontier Size: %d | Explored Size: %d | Number of Edges: %d' % (len(frontier), len(explored), len(edges)), end='')
 
     print()
 
