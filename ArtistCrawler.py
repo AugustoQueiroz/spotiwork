@@ -7,12 +7,14 @@ import urllib.parse
 import urllib.request
 
 parser = argparse.ArgumentParser(description="""
-        Build a network of artists from a source by skipping through related artists.
+        Build a network of artists starting from a source and crawling through spotify's 'Related Artists'.
         """
         )
 
-parser.add_argument('-s', '--seed', dest='seed', help='The id of the artist to begin the crawler with.')
+parser.add_argument('-s', '--seed', dest='seed', help='The id of the artist to begin the crawler with', required=True)
 parser.add_argument('-o', '--output', dest='out', help='The name of the file to which the network should be written')
+parser.add_argument('-e', '--expand', dest='input', help='The name of the network file that should be expanded upon')
+parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', default=False, help='Verbose mode will print the names of the artists being added to the frontier, whereas non-verbose mode will only present the number of artists currently in the frontier and the number of artists already explored')
 
 args = parser.parse_args()
 
@@ -35,12 +37,26 @@ def get_token(client_id, client_secret):
 
     return response_body['access_token'], response_body['token_type'], response_body['expires_in']
 
-def crawl(seed_id, auth_token, token_type, output_file=None):
-    api_call_url = 'https://api.spotify.com/v1/artists/%s/related-artists'
-
-    frontier = set([seed_id])
+def load_network(input_file_path):
+    frontier = set()
     explored = set()
     edges = set()
+
+    with open(input_file_path) as input_file:
+        for line in input_file:
+            line = line.split()
+            frontier.add(line[1])
+            explored.add(line[0])
+            edges.add((line[0], line[1]))
+
+    frontier = frontier - explored
+
+    return frontier, explored, edges
+
+def crawl(seed_id, auth_token, token_type, output_file=None, frontier=set(), explored=set(), edges=set(), verbose=False):
+    api_call_url = 'https://api.spotify.com/v1/artists/%s/related-artists'
+
+    frontier.add(seed_id)
     while len(frontier) > 0:
         current_artist_id = frontier.pop()
         explored.add(current_artist_id)
@@ -54,18 +70,32 @@ def crawl(seed_id, auth_token, token_type, output_file=None):
 
         for artist in response_body['artists']:
             if artist['id'] not in explored:
-                print('Adding %s to frontier...' % artist['name'])
+                if verbose: print('Adding %s to frontier...' % artist['name'])
                 frontier.add(artist['id'])
                 edge = (current_artist_id, artist['id'])
                 edges.add(edge)
                 if output_file != None:
                     output_file.write('%s\t%s\n' % edge)
+            if (artist['id'], current_artist_id) not in edges:
+                edges.add((current_artist_id, artist['id']))
+
+        if not verbose: print('\rFrontier Size: %d | Explored Size: %d' % (len(frontier), len(explored)), end='')
+
+    print()
 
     return explored, edges
 
 client_id = os.getenv('SPOTIFY_CLIENT_ID')
 client_secret = os.getenv('SPOTIFY_CLIENT_SECRET')
 
+explored = set()
+edges = set()
+
+if args.input is not None:
+    args.out = args.input
+    frontier, explored, edges = load_network(args.input)
+
 token, token_type, expiration = get_token(client_id, client_secret)
-with open(args.out, 'w') as output_file:
-    visited_artists, network = crawl(args.seed, token, token_type, output_file)
+print(args.out)
+with open(args.out, 'w' if args.input is None else 'a') as output_file:
+    visited_artists, network = crawl(args.seed, token, token_type, output_file, frontier=frontier, explored=explored, edges=edges, verbose=args.verbose)
