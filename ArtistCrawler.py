@@ -3,6 +3,7 @@ import json
 import base64
 import requests
 import argparse
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -69,15 +70,15 @@ def crawl(seed_id, auth_token, token_type, output_file=None, frontier=set(), exp
         current_artist_id = frontier.pop()  # Get one artist from the frontier
         explored.add(current_artist_id)     # Mark it as visited
 
-        # Get their related artists from Spotify
-        request = urllib.request.Request(api_call_url % current_artist_id, headers={
-            'Content-Type': 'application/json',
-            'Authorization': '%s %s' % (token_type, auth_token)
-            })
-        response = urllib.request.urlopen(request)
-        response_body = json.loads(response.read().decode('latin-1'))
-
         try:
+            # Get their related artists from Spotify
+            request = urllib.request.Request(api_call_url % current_artist_id, headers={
+                'Content-Type': 'application/json',
+                'Authorization': '%s %s' % (token_type, auth_token)
+                })
+            response = urllib.request.urlopen(request)
+            response_body = json.loads(response.read().decode('latin-1'))
+
             for artist in response_body['artists']:
                 if artist['id'] not in explored:
                     if verbose: print('Adding %s to frontier...' % artist['name'])
@@ -89,9 +90,12 @@ def crawl(seed_id, auth_token, token_type, output_file=None, frontier=set(), exp
                 if (artist['id'], current_artist_id) not in edges: 
                     # If the related artist has been explored but isn't connected to the current artist
                     edges.add((current_artist_id, artist['id']))
-        except KeyError: # If the authentication key expired, get a new one
+        except (KeyError, urllib.error.HTTPError) as e: # If the authentication key expired, get a new one
             # TODO - This should be done differently, probably going to wrap the whole thing in a class
             auth_token, token_type, _ = get_token(os.getenv('SPOTIFY_CLIENT_ID'), os.getenv('SPOTIFY_CLIENT_SECRET'))
+            # Add the current id back into the frontier and go again
+            frontier.add(current_artist_id)
+            continue
 
         if not verbose: print('\rFrontier Size: %d | Explored Size: %d | Number of Edges: %d' % (len(frontier), len(explored), len(edges)), end='')
 
