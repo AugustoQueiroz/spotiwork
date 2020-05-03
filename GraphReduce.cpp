@@ -62,11 +62,24 @@ void saveGraph(map<string, int> nodeMap, vector<vector<int>> edges, string outpu
 	}
 }
 
-int main() {
-	string inputFilePath = "artists.net";
+int main(int argc, char* argv[]) {
+	if (argc < 2) {
+		cout << "Usage: GraphReduce <graph_file> [output_file]" << endl;
+		return 1;
+	}
+
+	string inputFilePath = argv[1];
 
 	map<string, int> nodeMap = getNodeLabels(inputFilePath);
 	vector<vector<int>> edges = getEdges(inputFilePath, nodeMap);
 
-	saveGraph(nodeMap, edges, "artists_reduced.net");
+	string outputFilePath = "result.net";
+
+	if (argc == 3) {
+		outputFilePath = argv[2];
+	}
+
+	saveGraph(nodeMap, edges, outputFilePath);
+
+	return 0;
 }
